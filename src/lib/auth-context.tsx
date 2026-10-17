@@ -127,6 +127,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cred.user) {
         await loadUserData(cred.user);
       }
+    } catch (err) {
+      console.error("Google sign-in failed:", err);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -139,6 +142,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cred.user) {
         await loadUserData(cred.user);
       }
+    } catch (err) {
+      console.error("Email sign-in failed:", err);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -157,6 +163,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         await loadUserData(cred.user);
       }
+    } catch (err) {
+      console.error("Email sign-up failed:", err);
+      throw err;
     } finally {
       setLoading(false);
     }
