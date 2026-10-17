@@ -33,7 +33,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // Database and Auth instances
 // firestoreDatabaseId can be passed as second arg; if empty string or undefined, use default
 const databaseId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID?.trim();
-export const db = getFirestore(app, databaseId || undefined);
+export const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
