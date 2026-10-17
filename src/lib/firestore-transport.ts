@@ -3,6 +3,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createHash, randomUUID } from "node:crypto";
 import { roomStatusFromCards, type RoomSummary, type Transport } from "./transport";
 import { ResultCardSchema, type ResultCard } from "./result-card";
+import { type HumanSignOff } from "./human-signoff";
 import { SEED_CARDS } from "./seed";
 
 /**
@@ -17,6 +18,7 @@ import { SEED_CARDS } from "./seed";
  *   room     `room__<roomId>`     room metadata the board needs before any card exists
  *   card     `card__<roomId>__…`  one ResultCard, idempotent per (room, author, hash)
  *   message  `msg__<roomId>__…`   the raw body `send()` was handed
+ *   signoff  `signoff__<roomId>…` human sign-off confirming deal terms
  *
  * Every write is an upsert on a deterministic id, so two instances racing to
  * seed the same empty library converge on one copy instead of duplicating rows.
@@ -34,7 +36,7 @@ const DEFAULT_COLLECTION = "agent_commons";
 const UNATTRIBUTED = "unattributed";
 const OPEN_SUMMARY = "Room opened over Firestore; no result card posted yet.";
 
-type RowKind = "room" | "card" | "message";
+type RowKind = "room" | "card" | "message" | "signoff";
 
 interface RoomRow {
   kind: "room";
@@ -62,7 +64,16 @@ interface MessageRow {
   updated_at: string;
 }
 
-type Row = RoomRow | CardRow | MessageRow;
+interface SignOffRow {
+  kind: "signoff";
+  room_id: string;
+  hash: string;
+  display_name: string | null;
+  sign_off: HumanSignOff;
+  updated_at: string;
+}
+
+type Row = RoomRow | CardRow | MessageRow | SignOffRow;
 
 function first(...values: Array<string | undefined>): string | undefined {
   for (const v of values) {
@@ -83,6 +94,7 @@ function resolveProjectId(emulator: boolean): string {
   const existing = getApps()[0]?.options?.projectId;
   if (existing) return existing;
   if (emulator) return "agent-commons-local";
+
   throw new Error(
     "FirestoreTransport: set FIRESTORE_PROJECT_ID (or Firebase application default credentials) to reach a real Firestore.",
   );
@@ -152,6 +164,10 @@ function messageDocId(roomId: string): string {
   return docId("msg", roomId, String(Date.now()), randomUUID().slice(0, 8));
 }
 
+function signOffDocId(roomId: string, hash: string): string {
+  return docId("signoff", roomId, hash.replace(/^sha256:/, ""));
+}
+
 /**
  * A shared public collection is writable by whoever has the URL, so anything
  * that claims to be a card is checked against the frozen ResultCard schema
@@ -212,7 +228,12 @@ export class FirestoreTransport implements Transport {
   constructor(options: FirestoreTransportOptions = {}) {
     this.collectionId =
       options.collection ?? first(process.env.FIRESTORE_COLLECTION) ?? DEFAULT_COLLECTION;
-    this.db = getFirestore(resolveApp());
+    let databaseId: string | undefined = process.env.FIRESTORE_DATABASE_ID;
+    const app = resolveApp();
+    this.db =
+      databaseId && databaseId !== "(default)"
+        ? getFirestore(app, databaseId)
+        : getFirestore(app);
   }
 
   private col() {
@@ -374,5 +395,39 @@ export class FirestoreTransport implements Transport {
         { merge: true },
       );
     });
+  }
+
+  /**
+   * Persist a human sign-off into Firestore so deal confirmations remain durable.
+   */
+  async putSignOff(signOff: HumanSignOff): Promise<void> {
+    await this.ensureSeeded();
+    const now = new Date().toISOString();
+    const ref = this.col().doc(signOffDocId(signOff.room_id, signOff.hash));
+    await ref.set(
+      {
+        kind: "signoff",
+        room_id: signOff.room_id,
+        hash: signOff.hash,
+        display_name: signOff.display_name ?? null,
+        sign_off: toPlain(signOff),
+        updated_at: now,
+      },
+      { merge: true },
+    );
+  }
+
+  /**
+   * Retrieve all human sign-offs stored in Firestore.
+   */
+  async listSignOffs(): Promise<HumanSignOff[]> {
+    await this.ensureSeeded();
+    const snap = await this.col().where("kind", "==", "signoff").get();
+    const list: HumanSignOff[] = [];
+    for (const doc of snap.docs) {
+      const data = doc.data() as SignOffRow;
+      if (data.sign_off) list.push(data.sign_off);
+    }
+    return list;
   }
 }

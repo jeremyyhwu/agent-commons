@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserOrgId() {
+      // Assumes user profile exists with defaultOrgId field
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.defaultOrgId;
+    }
+
+    function isOrgOwner(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+
+    function isOrgMember(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+    }
+
+    function isUserOrgParticipant(negotiationId) {
+      let orgId = getUserOrgId();
+      // If user profile missing, deny
+      if (!(orgId is string)) return false;
+      let neg = get(/databases/$(database)/documents/negotiations/$(negotiationId));
+      return orgId in neg.data.participantOrgIds;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User profiles - strictly owner-isolated
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && isValidId(userId)
+        && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isSignedIn() && request.auth.uid == userId
+        && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role);
+      allow delete: false;
+
+      match /interactions/{interactionId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // Verifiable result cards, rooms, and records (can be read without an account for third-party verification)
+    match /agent_commons/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Organizations
+    match /organizations/{orgId} {
+      allow get, list: if isSignedIn() && (isOrgOwner(orgId) || isOrgMember(orgId));
+      allow create: if isSignedIn()
+        && isValidId(orgId)
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSignedIn() && (isOrgOwner(orgId) || isOrgMember(orgId));
+      allow delete: false;
+
+      match /members/{memberUid} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (
+          isOrgOwner(orgId) || request.auth.uid == memberUid
+        );
+      }
+    }
+
+    // Agents
+    match /agents/{agentId} {
+      allow get, list: if isSignedIn() && resource.data.ownerOrgId == getUserOrgId();
+      allow create: if isSignedIn()
+        && isValidId(agentId)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.ownerOrgId == getUserOrgId();
+      allow update: if isSignedIn()
+        && resource.data.createdByUid == request.auth.uid
+        && resource.data.ownerOrgId == getUserOrgId();
+      allow delete: false;
+    }
+
+    // Negotiations & subcollections
+    match /negotiations/{negotiationId} {
+      allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+      allow create: if isSignedIn() && isValidId(negotiationId)
+        && getUserOrgId() in request.resource.data.participantOrgIds;
+      allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
+      allow delete: false;
+
+      match /proposals/{proposalId} {
+        allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow create: if isSignedIn() && isValidId(proposalId)
+          && request.resource.data.proposerOrgId == getUserOrgId();
+        allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow delete: false;
+      }
+
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow create: if isSignedIn() && isValidId(messageId)
+          && request.resource.data.senderOrgId == getUserOrgId();
+        allow update, delete: if false;
+      }
+
+      match /agreements/{agreementId} {
+        allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow create: if isSignedIn() && isValidId(agreementId);
+        allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow delete: false;
+      }
+
+      match /interactions/{interactionId} {
+        allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow create, update: if isSignedIn() && isUserOrgParticipant(negotiationId);
+        allow delete: false;
+      }
+    }
+  }
+}

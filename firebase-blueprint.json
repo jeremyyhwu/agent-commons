@@ -1,0 +1,187 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Authenticated user profile and default settings",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "defaultOrgId": { "type": "string", "maxLength": 64 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["displayName", "createdAt", "updatedAt"]
+    },
+    "UserInteraction": {
+      "title": "User Interaction History",
+      "description": "Private chat and negotiation session interactions per user",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "agentId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["active", "archived", "closed"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "summary", "createdAt", "updatedAt"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "Business organization participating in agent negotiations",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 128 },
+        "sector": { "type": "string", "maxLength": 64 },
+        "businessType": { "type": "string", "maxLength": 64 },
+        "countryCode": { "type": "string", "maxLength": 8 },
+        "defaultCurrency": { "type": "string", "maxLength": 8 },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "ownerUid", "createdAt", "updatedAt"]
+    },
+    "OrgMember": {
+      "title": "Organization Member",
+      "description": "Membership mapping between a user and an organization",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["admin", "member", "authorized_signer"] },
+        "status": { "type": "string", "enum": ["active", "invited", "removed"] },
+        "joinedAt": { "type": "string" }
+      },
+      "required": ["role", "status", "joinedAt"]
+    },
+    "Agent": {
+      "title": "A2A Agent",
+      "description": "Registered autonomous negotiation agent with verifiable public key identity",
+      "type": "object",
+      "properties": {
+        "ownerOrgId": { "type": "string", "maxLength": 64 },
+        "createdByUid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "businessRole": { "type": "string", "maxLength": 64 },
+        "sector": { "type": "string", "maxLength": 64 },
+        "agentCardUrl": { "type": "string", "maxLength": 512 },
+        "protocolVersion": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "publicKey": { "type": "string", "maxLength": 256 },
+        "cardSignature": { "type": "string", "maxLength": 512 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["ownerOrgId", "createdByUid", "name", "publicKey", "createdAt", "updatedAt"]
+    },
+    "Negotiation": {
+      "title": "Negotiation Master Record",
+      "description": "Negotiation session connecting participating organizations and agents",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "number" },
+        "title": { "type": "string", "maxLength": 200 },
+        "negotiationType": { "type": "string", "maxLength": 64 },
+        "sector": { "type": "string", "maxLength": 64 },
+        "currentProposalId": { "type": "string", "maxLength": 64 },
+        "currentRound": { "type": "number" },
+        "nextActionOrgId": { "type": "string", "maxLength": 64 },
+        "currentTotalAmountMinor": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 8 },
+        "state": { "type": "string", "enum": ["negotiating", "agreed", "partial", "impasse", "no-match"] },
+        "stateHash": { "type": "string", "maxLength": 128 },
+        "lifecycle": { "type": "string", "enum": ["draft", "open", "awaiting_response", "declined", "withdrawn", "expired", "cancelled"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "schemaVersion", "state", "lifecycle", "createdAt", "updatedAt"]
+    },
+    "Proposal": {
+      "title": "Signed Proposal Card",
+      "description": "Versioned negotiation proposal with cryptographic termsHash and signatures",
+      "type": "object",
+      "properties": {
+        "sequence": { "type": "number" },
+        "proposalType": { "type": "string", "enum": ["offer", "counteroffer", "final"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "withdrawn", "expired", "superseded"] },
+        "proposerOrgId": { "type": "string", "maxLength": 64 },
+        "proposerAgentId": { "type": "string", "maxLength": 64 },
+        "totalAmountMinor": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 8 },
+        "termsHash": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sequence", "status", "proposerOrgId", "proposerAgentId", "termsHash", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Negotiation Message",
+      "description": "Retrievable non-authoritative transcript record",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string", "maxLength": 128 },
+        "senderAgentId": { "type": "string", "maxLength": 64 },
+        "senderOrgId": { "type": "string", "maxLength": 64 },
+        "content": { "type": "string", "maxLength": 4000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["content", "createdAt"]
+    },
+    "Agreement": {
+      "title": "Formally Signed Agreement",
+      "description": "Agreement binding terms snapshot with evaluated multi-party signatures",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "number" },
+        "proposalId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["pending_signatures", "agreed", "rejected"] },
+        "termsHash": { "type": "string", "maxLength": 128 },
+        "hashAlgorithm": { "type": "string", "maxLength": 32 },
+        "createdByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["schemaVersion", "proposalId", "status", "termsHash", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles with owner-isolated access"
+    },
+    "/users/{uid}/interactions/{interactionId}": {
+      "schema": "UserInteraction",
+      "description": "User-isolated interaction and session history"
+    },
+    "/organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Organizations participating in agent transactions"
+    },
+    "/organizations/{orgId}/members/{uid}": {
+      "schema": "OrgMember",
+      "description": "Organization membership list with role assignments"
+    },
+    "/agents/{agentId}": {
+      "schema": "Agent",
+      "description": "Registered A2A agents with cryptographic identity"
+    },
+    "/negotiations/{negotiationId}": {
+      "schema": "Negotiation",
+      "description": "Negotiation rooms with access restricted to participating organizations"
+    },
+    "/negotiations/{negotiationId}/proposals/{proposalId}": {
+      "schema": "Proposal",
+      "description": "Versioned signed proposals for a negotiation"
+    },
+    "/negotiations/{negotiationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Stored transcript messages for negotiation rooms"
+    },
+    "/negotiations/{negotiationId}/agreements/{agreementId}": {
+      "schema": "Agreement",
+      "description": "Final multi-party agreement records with signature proof"
+    }
+  }
+}

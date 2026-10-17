@@ -10,6 +10,8 @@ import {
   type SharingPolicy,
 } from "@/lib/agent-permissions";
 import { TrustBadges, TrustSummary } from "@/components/trust-badges";
+import { useAuth } from "@/lib/auth-context";
+import { registerAgent } from "@/lib/firestore-service";
 import { cn } from "@/lib/utils";
 
 /**
@@ -272,6 +274,7 @@ function Field({
 }
 
 export function YourAgents({ seeded }: { seeded: AgentSummary }) {
+  const { user, org, refreshUserData } = useAuth();
   const [main, setMain] = useState<AgentSummary>(seeded);
   const [created, setCreated] = useState<AgentSummary[]>([]);
   const [creating, setCreating] = useState(false);
@@ -346,6 +349,31 @@ export function YourAgents({ seeded }: { seeded: AgentSummary }) {
         policy: completePolicy(policy),
         basics,
       };
+
+      // If user is authenticated in Firebase, also persist to Firestore database
+      if (user && org) {
+        try {
+          await registerAgent({
+            id: data.card.agent_id,
+            ownerOrgId: org.id,
+            createdByUid: user.uid,
+            name: data.card.display_name,
+            businessRole: "buyer",
+            sector: org.sector || "retail",
+            agentCardUrl: `https://agentcommons.org/agents/${data.card.agent_id}/card.json`,
+            protocolVersion: "1.0",
+            status: "active",
+            claims: [
+              { field: "businessRole", state: "self_reported" },
+              { field: "sector", state: "unverified" },
+            ],
+          });
+          await refreshUserData();
+        } catch (dbErr) {
+          console.warn("Agent saved locally; Firestore sync notice:", dbErr);
+        }
+      }
+
       const list = [...created, agent];
       setCreated(list);
       write(CREATED_KEY, list);
@@ -366,7 +394,10 @@ export function YourAgents({ seeded }: { seeded: AgentSummary }) {
         {!creating && (
           <button
             type="button"
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              if (org?.name) setCompany(org.name);
+              setCreating(true);
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700"
           >
             <Plus className="size-4" aria-hidden="true" /> Create agent

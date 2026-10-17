@@ -4,6 +4,7 @@ import { roomStatusFromCards, type RoomSummary, type Transport } from "./transpo
 // sign-off wrapper wraps whatever that place selected rather than assuming the
 // demo transport.
 import { getTransport } from "./transport-factory";
+import { FirestoreTransport } from "./firestore-transport";
 import {
   buildSignOff,
   cardStage,
@@ -70,10 +71,26 @@ class SignOffTransportWrapper implements SignOffTransport {
     return this.inner.send(roomId, body);
   }
 
+
   async listSignOffs(): Promise<HumanSignOff[]> {
     // A copy: the cards and rooms a view holds must not be able to write into
     // the human step's history by accident.
-    return [...signOffHistory()];
+    const local = signOffHistory();
+    if (this.inner instanceof FirestoreTransport) {
+      try {
+        const remote = await this.inner.listSignOffs();
+        const seen = new Set(local.map((s) => `${s.room_id}__${s.hash}`));
+        for (const r of remote) {
+          if (!seen.has(`${r.room_id}__${r.hash}`)) {
+            local.push(r);
+            seen.add(`${r.room_id}__${r.hash}`);
+          }
+        }
+      } catch (err) {
+        console.warn("Firestore sign-offs sync note:", err);
+      }
+    }
+    return [...local];
   }
 
   async recordSignOff(input: RecordSignOffInput): Promise<HumanSignOff> {
@@ -90,6 +107,13 @@ class SignOffTransportWrapper implements SignOffTransport {
       history,
     );
     history.push(signOff);
+    if (this.inner instanceof FirestoreTransport) {
+      try {
+        await this.inner.putSignOff(signOff);
+      } catch (err) {
+        console.warn("Firestore sign-off save note:", err);
+      }
+    }
     return signOff;
   }
 }

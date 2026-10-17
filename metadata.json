@@ -1,0 +1,7 @@
+{
+  "name": "Agent Commons",
+  "description": "Cross-organization autonomous agent negotiation rooms with verifiable result cards.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

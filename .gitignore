@@ -42,4 +42,5 @@ yarn-error.log*
 next-env.d.ts
 
 # test build output (npm test)
-/.tmp-tests
+/tmp-tests
+firebase-applet-config.json
