@@ -173,19 +173,64 @@ gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
 ```
 
 ### Step 3: Deploy to Cloud Run
+
+> **Prerequisite:** Set up the seven `NEXT_PUBLIC_FIREBASE_*` values as Secret Manager
+> secrets (or build substitutions) — these are inlined into the client bundle at
+> build time and cannot be set as runtime env vars. Server-side secrets
+> (`GEMINI_API_KEY`, `FIRESTORE_PROJECT_ID`) are runtime env vars.
+
 ```bash
+# Deploy — Cloud Build uses cloudbuild.yaml to pass Firebase client config
+# as build args; runtime secrets come from Secret Manager.
 gcloud run deploy agent-commons \
   --source . \
   --region asia-southeast1 \
   --allow-unauthenticated \
-  --set-env-vars TRANSPORT=firestore,FIRESTORE_PROJECT_ID=$(gcloud config get-value project) \
+  --set-env-vars FIRESTORE_PROJECT_ID=$(gcloud config get-value project),TRANSPORT=firestore \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
 ```
 
-### Step 4: Apply Required Campaign Verification Label
+To provide the Firebase client config at build time, create Secret Manager
+secrets and pass them as substitutions:
+
+```bash
+gcloud secrets create next-public-firebase-api-key --replication-policy=automatic
+echo -n "YOUR_API_KEY" | gcloud secrets versions add next-public-firebase-api-key --data-file=-
+
+gcloud run deploy agent-commons \
+  --source . \
+  --region asia-southeast1 \
+  --allow-unauthenticated \
+  --substitutions=_FB_API_KEY=$(gcloud secrets versions access latest --secret=next-public-firebase-api-key),_FB_AUTH_DOMAIN=...,_FB_PROJECT_ID=... \
+  --set-env-vars FIRESTORE_PROJECT_ID=$(gcloud config get-value project),TRANSPORT=firestore \
+  --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
+```
+
+### Step 4: Deploy Firestore Security Rules
+
+```bash
+gcloud firestore rules deploy firestore.rules
+```
+
+### Step 5: Verify the deployment
+
+```bash
+# Auth endpoint (replace TOKEN with a Firebase ID token)
+curl -H "Authorization: Bearer $TOKEN" \
+  https://agent-commons-xxxx-uc.a.run.app/api/auth/me
+
+# Login page
+open https://agent-commons-xxxx-uc.a.run.app/login
+```
+
+The app auto-redirects to `/` after sign-in. On first sign-in, the auth
+context creates a default organization and default agent in Firestore.
+
+### Step 6: Apply Required Campaign Verification Label
+
 ```bash
 gcloud run services update agent-commons \
-  --update-labels=dev-tutorial=cloud-run-ai-challenge \
+  --update-labels=ai-builder-cup=agent-commons \
   --region asia-southeast1
 ```
 

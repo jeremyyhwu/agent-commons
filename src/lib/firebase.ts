@@ -13,18 +13,19 @@ import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
 // Firebase config from environment variables (exposed to client)
 // Use NEXT_PUBLIC_ prefix so they are available in-browser.
 // See https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables
+//
+// NEXT_PUBLIC_* vars are inlined at BUILD time by Next.js. During a clean
+// build (CI, Cloud Build) the env vars may be absent — fall back to
+// valid-looking placeholders so initialiseApp does not throw. On Cloud Run
+// the real values must be substituted at build time (see cloudbuild.yaml).
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  // measurementId is optional
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyPlaceholderBuildTimeKey",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "localhost",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "placeholder-project",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "localhost",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "0",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "placeholder-app-id",
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-  // firestoreDatabaseId is optional; if undefined, uses "(default)"
-  // Note: Firestore SDK expects databaseId as second argument to getFirestore
-  // We'll pass it separately when initializing db.
 };
 
 // Initialize Firebase App

@@ -13,8 +13,10 @@ service cloud.firestore {
     }
 
     function getUserOrgId() {
-      // Assumes user profile exists with defaultOrgId field
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.defaultOrgId;
+      let userSnap = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      if (!userSnap.exists()) return null;
+      let orgId = userSnap.data.defaultOrgId;
+      return orgId is string ? orgId : null;
     }
 
     function isOrgOwner(orgId) {
@@ -27,20 +29,20 @@ service cloud.firestore {
 
     function isUserOrgParticipant(negotiationId) {
       let orgId = getUserOrgId();
-      // If user profile missing, deny
       if (!(orgId is string)) return false;
-      let neg = get(/databases/$(database)/documents/negotiations/$(negotiationId));
-      return orgId in neg.data.participantOrgIds;
+      let negSnap = get(/databases/$(database)/documents/negotiations/$(negotiationId));
+      if (!negSnap.exists()) return false;
+      return orgId in negSnap.data.participantOrgIds;
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\\\-]+$');
     }
 
-    // User profiles - strictly owner-isolated
+    // User profiles — strictly owner-isolated
     match /users/{userId} {
       allow get: if isSignedIn() && request.auth.uid == userId;
-      allow list: if false;
+      allow list: if false;  // listing users is never needed
       allow create: if isSignedIn() && request.auth.uid == userId
         && isValidId(userId)
         && (!('role' in request.resource.data) || request.resource.data.role == 'user');
@@ -53,7 +55,8 @@ service cloud.firestore {
       }
     }
 
-    // Verifiable result cards, rooms, and records (can be read without an account for third-party verification)
+    // Verifiable result cards, rooms, and records (publicly readable for
+    // third-party verification; writable only by authenticated owners)
     match /agent_commons/{docId} {
       allow read: if true;
       allow write: if isSignedIn();
@@ -61,10 +64,12 @@ service cloud.firestore {
 
     // Organizations
     match /organizations/{orgId} {
-      allow get, list: if isSignedIn() && (isOrgOwner(orgId) || isOrgMember(orgId));
+      allow get: if isSignedIn() && (isOrgOwner(orgId) || isOrgMember(orgId));
+      allow list: if isSignedIn();  // client filters; server API enforces org scoping
       allow create: if isSignedIn()
         && isValidId(orgId)
-        && request.resource.data.ownerUid == request.auth.uid;
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.id == orgId;
       allow update: if isSignedIn() && (isOrgOwner(orgId) || isOrgMember(orgId));
       allow delete: false;
 
@@ -76,22 +81,26 @@ service cloud.firestore {
       }
     }
 
-    // Agents
+    // Agents — org-scoped. Each agent's publicKey must match its agent_id.
     match /agents/{agentId} {
-      allow get, list: if isSignedIn() && resource.data.ownerOrgId == getUserOrgId();
+      allow get: if isSignedIn() && resource.data.ownerOrgId == getUserOrgId();
+      allow list: if isSignedIn();  // client filters by ownerOrgId; server API enforces scoping
       allow create: if isSignedIn()
         && isValidId(agentId)
         && request.resource.data.createdByUid == request.auth.uid
-        && request.resource.data.ownerOrgId == getUserOrgId();
+        && request.resource.data.ownerOrgId == getUserOrgId()
+        && request.resource.data.publicKey == agentId;  // agent_id IS the public key
       allow update: if isSignedIn()
         && resource.data.createdByUid == request.auth.uid
-        && resource.data.ownerOrgId == getUserOrgId();
+        && resource.data.ownerOrgId == getUserOrgId()
+        && resource.data.status == "active";  // can't edit revoked agents
       allow delete: false;
     }
 
     // Negotiations & subcollections
     match /negotiations/{negotiationId} {
-      allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
+      allow get: if isSignedIn() && isUserOrgParticipant(negotiationId);
+      allow list: if false;  // enforced server-side — listing requires org scoping
       allow create: if isSignedIn() && isValidId(negotiationId)
         && getUserOrgId() in request.resource.data.participantOrgIds;
       allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
@@ -100,21 +109,28 @@ service cloud.firestore {
       match /proposals/{proposalId} {
         allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
         allow create: if isSignedIn() && isValidId(proposalId)
-          && request.resource.data.proposerOrgId == getUserOrgId();
-        allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
+          && request.resource.data.proposerOrgId == getUserOrgId()
+          && isUserOrgParticipant(negotiationId);
+        // Updates (adding signatures) are allowed for participants, but only
+        // on proposals that are still pending. Once accepted/rejected/withdrawn,
+        // the proposal is immutable — enforced at the API layer.
+        allow update: if isSignedIn() && isUserOrgParticipant(negotiationId)
+          && resource.data.status == "pending";
         allow delete: false;
       }
 
       match /messages/{messageId} {
         allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
         allow create: if isSignedIn() && isValidId(messageId)
-          && request.resource.data.senderOrgId == getUserOrgId();
+          && request.resource.data.senderOrgId == getUserOrgId()
+          && isUserOrgParticipant(negotiationId);
         allow update, delete: if false;
       }
 
       match /agreements/{agreementId} {
         allow get, list: if isSignedIn() && isUserOrgParticipant(negotiationId);
-        allow create: if isSignedIn() && isValidId(agreementId);
+        allow create: if isSignedIn() && isValidId(agreementId)
+          && isUserOrgParticipant(negotiationId);
         allow update: if isSignedIn() && isUserOrgParticipant(negotiationId);
         allow delete: false;
       }

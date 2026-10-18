@@ -286,29 +286,51 @@ export async function listAgents(ownerOrgId?: string): Promise<AgentRecord[]> {
 export async function registerAgent(
   agent: Omit<AgentRecord, "createdAt" | "updatedAt" | "publicKey" | "cardSignature" | "ownerBinding"> & {
     keyPair?: UniversalKeyPair;
+    cardSignature?: string;
+    ownerBinding?: {
+      ownerPublicKey: string;
+      signature: string;
+    };
   },
 ): Promise<AgentRecord> {
   const path = `agents/${agent.id}`;
   const now = new Date().toISOString();
   try {
-    // Generate Ed25519 keys if not supplied
+    // Use the caller-supplied key pair (from the agent card) when provided,
+    // so the Firestore record's publicKey matches the card's agent_id.
     const keys = agent.keyPair || generateUniversalKeyPair();
-    const ownerKeys = generateUniversalKeyPair();
 
-    const cardPayload = {
-      id: agent.id,
-      name: agent.name,
-      ownerOrgId: agent.ownerOrgId,
-      businessRole: agent.businessRole,
-      sector: agent.sector,
-    };
-    const cardSignature = signUniversalValue(cardPayload, keys.secretKey);
+    // If the card's signature and owner-binding already exist (the card was
+    // built elsewhere with this same key pair), use them directly instead of
+    // regenerating a different card signature and a separate owner key pair.
+    const cardSignature = agent.cardSignature ?? signUniversalValue(
+      {
+        id: agent.id,
+        name: agent.name,
+        ownerOrgId: agent.ownerOrgId,
+        businessRole: agent.businessRole,
+        sector: agent.sector,
+      },
+      keys.secretKey,
+    );
 
-    const ownerBindingPayload = {
-      ownerPublicKey: ownerKeys.publicKeyRaw,
-      agentId: agent.id,
-    };
-    const ownerSignature = signUniversalValue(ownerBindingPayload, ownerKeys.secretKey);
+    const ownerBinding = agent.ownerBinding
+      ? {
+          ownerPublicKey: agent.ownerBinding.ownerPublicKey,
+          agentId: agent.id,
+          signature: agent.ownerBinding.signature,
+        }
+      : (() => {
+          const ownerKeys = generateUniversalKeyPair();
+          return {
+            ownerPublicKey: ownerKeys.publicKeyRaw,
+            agentId: agent.id,
+            signature: signUniversalValue(
+              { ownerPublicKey: ownerKeys.publicKeyRaw, agentId: agent.id },
+              ownerKeys.secretKey,
+            ),
+          };
+        })();
 
     const record: AgentRecord = {
       id: agent.id,
@@ -322,11 +344,7 @@ export async function registerAgent(
       status: "active",
       publicKey: keys.publicKeyRaw,
       cardSignature,
-      ownerBinding: {
-        ownerPublicKey: ownerKeys.publicKeyRaw,
-        agentId: agent.id,
-        signature: ownerSignature,
-      },
+      ownerBinding,
       claims: agent.claims || [
         { field: "businessRole", state: "self_reported" },
         { field: "sector", state: "unverified" },
@@ -531,17 +549,21 @@ export async function signAndAcceptProposal(params: {
 
     const isAgreed = updatedSigs.length >= (neg.acceptanceRule.minAgreed || 2);
     const newState = isAgreed ? "agreed" : "partial";
-    const updatedProposal: ProposalRecord = {
+    const finalProposal: ProposalRecord = {
       ...proposal,
       signatures: updatedSigs,
       status: isAgreed ? "accepted" : "pending",
       updatedAt: now,
     };
 
-    await setDoc(doc(db, "negotiations", negotiationId, "proposals", proposalId), sanitizePayload(updatedProposal));
+    await setDoc(
+      doc(db, "negotiations", negotiationId, "proposals", proposalId),
+      sanitizePayload(finalProposal),
+    );
     await updateDoc(
       doc(db, "negotiations", negotiationId),
       sanitizePayload({
+        currentProposalId: proposalId,
         state: newState,
         lifecycle: isAgreed ? "open" : "awaiting_response",
         lastActivityAt: now,
@@ -549,8 +571,81 @@ export async function signAndAcceptProposal(params: {
       }),
     );
 
-    return { proposal: updatedProposal, state: newState };
+    return { proposal: finalProposal, state: newState };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
+}
+
+// ----------------- NEGOTIATION READ (with proposals) -----------------
+
+/**
+ * Read a negotiation together with its sorted proposals. Used by API routes
+ * and state recomputation. The proposals are needed to recompute `state`
+ * (which is derived, not stored).
+ */
+export async function getNegotiationWithProposals(
+  negotiationId: string,
+): Promise<(NegotiationRecord & { proposals: ProposalRecord[] }) | null> {
+  const path = `negotiations/${negotiationId}`;
+  try {
+    const negSnap = await getDoc(doc(db, "negotiations", negotiationId));
+    if (!negSnap.exists()) return null;
+    const negotiation = { ...negSnap.data(), id: negSnap.id } as NegotiationRecord;
+    const proposals = await listProposals(negotiationId);
+    return { ...negotiation, proposals };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+  }
+}
+
+// ----------------- MESSAGES -----------------
+
+/**
+ * Persist a message on the negotiation's subcollection. Messages are stored
+ * and retrievable, but — per user-data-guide §5 — no state transition depends
+ * on them. They are correlation/audit data only.
+ */
+export async function addMessage(
+  negotiationId: string,
+  message: Omit<MessageRecord, "id" | "createdAt">,
+): Promise<MessageRecord> {
+  const path = `negotiations/${negotiationId}/messages`;
+  const now = new Date().toISOString();
+  try {
+    const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const record: MessageRecord = { ...message, id, createdAt: now };
+    await setDoc(
+      doc(db, "negotiations", negotiationId, "messages", id),
+      sanitizePayload(record),
+    );
+    return record;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function listMessages(negotiationId: string): Promise<MessageRecord[]> {
+  const path = `negotiations/${negotiationId}/messages`;
+  try {
+    const snap = await getDocs(collection(db, "negotiations", negotiationId, "messages"));
+    return snap.docs
+      .map((d) => ({ ...d.data(), id: d.id }) as MessageRecord)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+// ----------------- INTERACTIONS -----------------
+
+/**
+ * Persist an A2A interaction record that correlates to a negotiation.
+ * Links remote task/context IDs to the negotiation for cross-reference.
+ */
+export async function saveInteraction(
+  userId: string,
+  interaction: Omit<UserInteractionSession, "id" | "createdAt" | "updatedAt">,
+): Promise<UserInteractionSession> {
+  return saveUserInteraction(userId, interaction);
 }
