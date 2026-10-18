@@ -1,0 +1,117 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.role == 'admin' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Test connection probe
+    match /test/{testId} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // Entity Validation: UserProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt'])
+        && (!('uid' in data) || (data.uid is string && data.uid == request.auth.uid))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 256))
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2048))
+        && (!('role' in data) || data.role in ['user', 'admin'])
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    // Entity Validation: UserChatSession
+    function isValidChatSession(data) {
+      return data.keys().hasAll(['id', 'userId', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'roomId', 'title', 'summary', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && (!('roomId' in data) || (data.roomId is string && data.roomId.size() <= 128))
+        && (!('title' in data) || (data.title is string && data.title.size() <= 256))
+        && (!('summary' in data) || (data.summary is string && data.summary.size() <= 4096));
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && incoming().keys().hasAll(['uid', 'email'])
+        && isValidUserProfile(incoming())
+        && (!('role' in incoming()) || incoming().role == 'user');
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (!('uid' in incoming()) || incoming().uid == existing().uid)
+        && (!('role' in incoming()) || incoming().role == existing().role);
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // User Isolated Chat History & Negotiation Sessions
+      match /sessions/{sessionId} {
+        allow get: if isOwner(userId) && isValidId(sessionId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(sessionId)
+          && isValidChatSession(incoming())
+          && incoming().id == sessionId;
+        allow update: if isOwner(userId)
+          && isValidId(sessionId)
+          && isValidChatSession(incoming())
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(userId) && isValidId(sessionId);
+      }
+    }
+
+    // Agent Commons Rooms & Result Records
+    match /agent_commons/{docId} {
+      allow read: if isValidId(docId);
+      allow create, update: if isVerified() && isValidId(docId);
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    // Admin Directory for RBAC
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && isValidId(adminId);
+      allow write: if isAdmin() && isValidId(adminId);
+    }
+  }
+}

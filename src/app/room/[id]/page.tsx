@@ -17,6 +17,7 @@ import { DATA_PROVENANCE } from "@/lib/scenarios";
 import type { RoomSummary } from "@/lib/transport";
 import type { ResultCard } from "@/lib/result-card";
 import { confirmSignOff } from "./actions";
+import { AuthGate } from "@/components/auth-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -124,8 +125,9 @@ export default async function RoomPage({
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-12">
-      <Link href="/" className="text-sm text-sky-700 hover:underline dark:text-sky-400">
+    <AuthGate>
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-12">
+        <Link href="/" className="text-sm text-sky-700 hover:underline dark:text-sky-400">
         ← Overview
       </Link>
 
@@ -330,5 +332,6 @@ export default async function RoomPage({
           label belongs here too — not only on the board and the home page. */}
       <footer className="mt-8 text-xs text-neutral-500">{DATA_PROVENANCE}</footer>
     </main>
+    </AuthGate>
   );
 }
