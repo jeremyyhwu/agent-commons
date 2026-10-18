@@ -16,6 +16,7 @@ import { agentName, buildOverview, readableTerms } from "@/lib/overview";
 import type { RoomSummary } from "@/lib/transport";
 import type { ResultCard } from "@/lib/result-card";
 import { confirmSignOff } from "./actions";
+import { AuthGate } from "@/components/auth-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,8 +124,9 @@ export default async function RoomPage({
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-12">
-      <Link href="/" className="text-sm text-sky-700 hover:underline dark:text-sky-400">
+    <AuthGate>
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-12">
+        <Link href="/" className="text-sm text-sky-700 hover:underline dark:text-sky-400">
         ← Overview
       </Link>
 
@@ -325,5 +327,6 @@ export default async function RoomPage({
         </div>
       </details>
     </main>
+    </AuthGate>
   );
 }

@@ -83,22 +83,18 @@ function resolveProjectId(emulator: boolean): string {
   const existing = getApps()[0]?.options?.projectId;
   if (existing) return existing;
   if (emulator) return "agent-commons-local";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const config = require("../../firebase-applet-config.json");
+    if (config?.projectId) return config.projectId;
+  } catch {
+    // ignore
+  }
   throw new Error(
     "FirestoreTransport: set FIRESTORE_PROJECT_ID (or Firebase application default credentials) to reach a real Firestore.",
   );
 }
 
-/**
- * Idempotent per process: Next dev hot-reload must not re-initialise the SDK.
- *
- * Emulator mode passes only a project id on purpose. firebase-admin hands the
- * datastore endpoint off to `@google-cloud/firestore`, which reads
- * FIRESTORE_EMULATOR_HOST itself, and its Firestore path accepts nothing but a
- * service-account or application-default credential — a stub credential for
- * quiet logs is rejected outright. So a local run prints one
- * `MetadataLookupWarning` line and then works; a real deployment supplies ADC
- * and never sees it.
- */
 function resolveApp(): App {
   const existing = getApps().find((app) => app.name === APP_NAME);
   if (existing) return existing;
@@ -111,8 +107,18 @@ function resolveApp(): App {
   if (!emulator && defaultApp?.options?.projectId === projectId && defaultApp.name === "[DEFAULT]") {
     return defaultApp;
   }
+
+  let credential = undefined;
+  if (!emulator) {
+    try {
+      credential = applicationDefault();
+    } catch {
+      credential = undefined;
+    }
+  }
+
   return initializeApp(
-    emulator ? { projectId } : { projectId, credential: applicationDefault() },
+    credential ? { projectId, credential } : { projectId },
     APP_NAME,
   );
 }
@@ -212,7 +218,18 @@ export class FirestoreTransport implements Transport {
   constructor(options: FirestoreTransportOptions = {}) {
     this.collectionId =
       options.collection ?? first(process.env.FIRESTORE_COLLECTION) ?? DEFAULT_COLLECTION;
-    this.db = getFirestore(resolveApp());
+    const app = resolveApp();
+    let dbId: string | undefined = process.env.FIRESTORE_DATABASE_ID;
+    if (!dbId) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const config = require("../../firebase-applet-config.json");
+        if (config?.firestoreDatabaseId) dbId = config.firestoreDatabaseId;
+      } catch {
+        // ignore
+      }
+    }
+    this.db = dbId ? getFirestore(app, dbId) : getFirestore(app);
   }
 
   private col() {

@@ -17,6 +17,7 @@ import { conversationUrl } from "@/lib/conversation-links";
 import { trustWarning } from "@/lib/trust-badges";
 import { TrustWarning } from "@/components/trust-warning";
 import { DATA_PROVENANCE } from "@/lib/scenarios";
+import { AuthGate } from "@/components/auth-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,7 +48,8 @@ export default async function OverviewPage() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-12">
+    <AuthGate>
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-12">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="max-w-2xl text-base text-neutral-700 dark:text-neutral-300">
@@ -86,6 +88,7 @@ export default async function OverviewPage() {
 
       <footer className="text-xs text-neutral-500">{DATA_PROVENANCE}</footer>
     </main>
+    </AuthGate>
   );
 }
 
