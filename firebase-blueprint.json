@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 1024 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email"]
+    },
+    "UserChatSession": {
+      "title": "UserChatSession",
+      "description": "User-isolated document storage for saving chat history and session summaries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "roomId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "summary": { "type": "string", "maxLength": 2048 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "createdAt"]
+    },
+    "AgentCommonsRecord": {
+      "title": "AgentCommonsRecord",
+      "description": "Autonomous negotiation rooms, verified result cards, and message logs",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["room", "card", "message"] },
+        "room_id": { "type": "string", "maxLength": 128 },
+        "updated_at": { "type": "string", "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 4096 }
+      },
+      "required": ["kind", "room_id", "updated_at"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrative identity records for RBAC",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 256 },
+        "assignedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User-isolated profile document"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "UserChatSession",
+      "description": "User-isolated chat session and negotiation summary storage"
+    },
+    "/agent_commons/{docId}": {
+      "schema": "AgentCommonsRecord",
+      "description": "Negotiation room outcomes and result cards"
+    },
+    "/admins/{adminId}": {
+      "schema": "AdminRecord",
+      "description": "Administrative role registry"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { buildOverview } from "@/lib/overview";
 import { buyerProfile, buyerTrust } from "@/lib/agent-trust";
 import { TrustLegend } from "@/components/trust-badges";
 import { YourAgents, type AgentSummary } from "@/components/your-agents";
+import { AuthGate } from "@/components/auth-gate";
 
 /**
  * Agents — the agents that work for you.
@@ -44,26 +45,28 @@ export default async function AgentsPage() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-12">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-        <p className="max-w-2xl text-base text-neutral-700 dark:text-neutral-300">
-          The agents that work for you. Other companies&apos; agents check these badges before
-          they agree to negotiate — the companies you deal with, and their agents&apos; badges,
-          are on the{" "}
-          <Link href="/" className="text-sky-700 hover:underline dark:text-sky-400">
-            Overview
-          </Link>
-          .
-        </p>
-      </header>
+    <AuthGate>
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-12">
+        <header className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
+          <p className="max-w-2xl text-base text-neutral-700 dark:text-neutral-300">
+            The agents that work for you. Other companies&apos; agents check these badges before
+            they agree to negotiate — the companies you deal with, and their agents&apos; badges,
+            are on the{" "}
+            <Link href="/" className="text-sky-700 hover:underline dark:text-sky-400">
+              Overview
+            </Link>
+            .
+          </p>
+        </header>
 
-      <YourAgents seeded={seeded} />
+        <YourAgents seeded={seeded} />
 
-      <section className="rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
-        <h2 className="mb-3 text-sm font-semibold">What the badges mean</h2>
-        <TrustLegend />
-      </section>
-    </main>
+        <section className="rounded-2xl border border-neutral-200 p-5 dark:border-neutral-800">
+          <h2 className="mb-3 text-sm font-semibold">What the badges mean</h2>
+          <TrustLegend />
+        </section>
+      </main>
+    </AuthGate>
   );
 }

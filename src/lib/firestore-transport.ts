@@ -111,8 +111,18 @@ function resolveApp(): App {
   if (!emulator && defaultApp?.options?.projectId === projectId && defaultApp.name === "[DEFAULT]") {
     return defaultApp;
   }
+
+  let credential = undefined;
+  if (!emulator) {
+    try {
+      credential = applicationDefault();
+    } catch {
+      credential = undefined;
+    }
+  }
+
   return initializeApp(
-    emulator ? { projectId } : { projectId, credential: applicationDefault() },
+    credential ? { projectId, credential } : { projectId },
     APP_NAME,
   );
 }
@@ -218,10 +228,13 @@ export class FirestoreTransport implements Transport {
     // broken deployment. FIRESTORE_DATABASE_ID picks one; unset means "(default)".
     const databaseId = first(process.env.FIRESTORE_DATABASE_ID);
     const app = resolveApp();
-    this.db =
-      databaseId && databaseId !== "(default)"
-        ? getFirestore(app, databaseId)
-        : getFirestore(app);
+    const dbId = process.env.FIRESTORE_DATABASE_ID;
+    if (!dbId) {
+      throw new Error(
+        "FirestoreTransport: set FIRESTORE_DATABASE_ID to use a named Firestore database.",
+      );
+    }
+    this.db = getFirestore(app, dbId);
   }
 
   private col() {
