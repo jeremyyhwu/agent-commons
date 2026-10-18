@@ -3,10 +3,10 @@
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/context/auth-context";
 import { Badge } from "@/components/ui";
-import { ShieldCheck, Lock, UserCheck } from "lucide-react";
+import { ShieldCheck, Lock } from "lucide-react";
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { user, error, signIn, signInAsUser } = useAuth();
+  const { user, error, signIn } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -17,18 +17,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
       await signIn();
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : "Failed to sign in with Google.");
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
-  const handleInstantSignIn = async () => {
-    setSigningIn(true);
-    setAuthError(null);
-    try {
-      await signInAsUser("canindojp@gmail.com", "JP Canindo");
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : "Failed to sign in.");
     } finally {
       setSigningIn(false);
     }
@@ -80,16 +68,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
                 />
               </svg>
               <span>{signingIn ? "Signing in with Google…" : "Continue with Google"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleInstantSignIn}
-              disabled={signingIn}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-sky-700 disabled:opacity-60 shadow-sm"
-            >
-              <UserCheck className="size-4" />
-              <span>Continue as canindojp@gmail.com</span>
             </button>
 
             {(authError || error) && (

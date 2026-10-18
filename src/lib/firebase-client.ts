@@ -17,7 +17,17 @@ import {
   getDocFromServer,
   type Firestore,
 } from "firebase/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
+
+// Build Firebase config from environment variables (NEXT_PUBLIC_* for client)
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  firestoreDatabaseId: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID,
+};
 
 // Initialize Firebase client instance idempotently
 export const app: FirebaseApp =
@@ -124,6 +134,12 @@ export async function syncUserProfile(user: {
   photoURL?: string | null;
 }): Promise<void> {
   if (!user.uid) return;
+  // Only sync to Firestore if there's a real Firebase authenticated user matching this uid
+  const fbUser = auth.currentUser;
+  if (!fbUser || fbUser.uid !== user.uid) {
+    // Mock user or mismatched auth — skip Firestore write (demo mode)
+    return;
+  }
   const userRef = doc(db, "users", user.uid);
   const now = new Date().toISOString();
   const safeEmail = (user.email || "user@agentcommons.example").slice(0, 200);

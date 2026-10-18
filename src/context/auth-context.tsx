@@ -28,7 +28,7 @@ interface AuthContextValue {
   loading: boolean;
   error: string | null;
   signIn: () => Promise<void>;
-  signInAsUser: (email?: string, name?: string) => Promise<void>;
+  signInAsUser: (email: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -118,15 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn("Google sign-in attempt notice:", msg);
-      // If popup or authorization issue occurred, fall back to verified session
-      await handleSignInAsUser("canindojp@gmail.com", "JP Canindo");
+      setError(msg);
     }
   };
 
-  const handleSignInAsUser = async (
-    email = "canindojp@gmail.com",
-    name = "JP Canindo",
-  ) => {
+  const handleSignInAsUser = async (email: string, name: string) => {
     setError(null);
     const authUser: AuthUser = {
       uid: "usr_" + email.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 24),

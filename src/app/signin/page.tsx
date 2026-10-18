@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { Badge } from "@/components/ui";
-import { ShieldCheck, Lock, CheckCircle2, UserCheck } from "lucide-react";
+import { ShieldCheck, Lock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 export default function SignInPage() {
   const router = useRouter();
-  const { user, error, signIn, signInAsUser, signOut } = useAuth();
+  const { user, error, signIn, signOut } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -22,21 +22,6 @@ export default function SignInPage() {
     } catch (err) {
       setAuthError(
         err instanceof Error ? err.message : "Failed to sign in with Google.",
-      );
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
-  const handleInstantSignIn = async () => {
-    setSigningIn(true);
-    setAuthError(null);
-    try {
-      await signInAsUser("canindojp@gmail.com", "JP Canindo");
-      router.push("/");
-    } catch (err) {
-      setAuthError(
-        err instanceof Error ? err.message : "Failed to sign in.",
       );
     } finally {
       setSigningIn(false);
@@ -119,16 +104,6 @@ export default function SignInPage() {
                 />
               </svg>
               <span>{signingIn ? "Connecting with Google…" : "Sign In with Google"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleInstantSignIn}
-              disabled={signingIn}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-sky-700 disabled:opacity-60 shadow-sm"
-            >
-              <UserCheck className="size-4" />
-              <span>Continue as canindojp@gmail.com</span>
             </button>
 
             {(authError || error) && (

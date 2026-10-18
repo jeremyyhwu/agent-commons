@@ -83,13 +83,6 @@ function resolveProjectId(emulator: boolean): string {
   const existing = getApps()[0]?.options?.projectId;
   if (existing) return existing;
   if (emulator) return "agent-commons-local";
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const config = require("../../firebase-applet-config.json");
-    if (config?.projectId) return config.projectId;
-  } catch {
-    // ignore
-  }
   throw new Error(
     "FirestoreTransport: set FIRESTORE_PROJECT_ID (or Firebase application default credentials) to reach a real Firestore.",
   );
@@ -219,17 +212,13 @@ export class FirestoreTransport implements Transport {
     this.collectionId =
       options.collection ?? first(process.env.FIRESTORE_COLLECTION) ?? DEFAULT_COLLECTION;
     const app = resolveApp();
-    let dbId: string | undefined = process.env.FIRESTORE_DATABASE_ID;
+    const dbId = process.env.FIRESTORE_DATABASE_ID;
     if (!dbId) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const config = require("../../firebase-applet-config.json");
-        if (config?.firestoreDatabaseId) dbId = config.firestoreDatabaseId;
-      } catch {
-        // ignore
-      }
+      throw new Error(
+        "FirestoreTransport: set FIRESTORE_DATABASE_ID to use a named Firestore database.",
+      );
     }
-    this.db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+    this.db = getFirestore(app, dbId);
   }
 
   private col() {
