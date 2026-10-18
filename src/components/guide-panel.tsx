@@ -29,6 +29,8 @@ interface GuideResponse {
   grounded?: string;
   tool?: string;
   result?: string;
+  /** Present when a model was configured but the call failed. */
+  note?: string;
 }
 
 /**
@@ -46,7 +48,16 @@ function SourceBadge({ source, model }: { source?: string; model?: string }) {
     return <Badge tone="amber">{model ?? "test model"} · not Gemini</Badge>;
   }
   if (source === "deterministic-fallback") {
-    return <Badge tone="amber">fixed fallback (no model configured)</Badge>;
+    // Two different situations share this source: nothing configured, and a model
+    // that was configured but the call failed — quota, rate limit, network,
+    // timeout. Reporting the second as "no model configured" is a lie, and it is
+    // exactly the one that happens mid-demo when a free tier runs dry.
+    const hadModel = Boolean(model && model !== "none");
+    return (
+      <Badge tone="amber">
+        {hadModel ? `model call failed (${model}) — fixed answer` : "fixed fallback (no model configured)"}
+      </Badge>
+    );
   }
   if (source === "deterministic") {
     return <Badge tone="amber">deterministic tool</Badge>;
@@ -68,7 +79,12 @@ export function GuidePanel({
 
   // The panel is the Gemini integration. When something else answers, say so in
   // the heading rather than under it — a title is what a viewer reads first.
-  const isGemini = provider !== "openai-compatible";
+  //
+  // Three states, named explicitly. Treating an unknown provider as Gemini was
+  // the wrong default: a build with no key at all still said "Gemini assistant",
+  // which is the one case where the label misleads most.
+  const isGemini = provider === "gemini";
+  const isTestProvider = provider === "openai-compatible";
 
   async function ask(q: string) {
     const trimmed = q.trim();
@@ -109,7 +125,9 @@ export function GuidePanel({
               dashboard — the deals above come from the agents, not from this panel.
               {isGemini
                 ? " Every answer names the model that produced it."
-                : ` Currently answering with ${model ?? "a test provider"} — not Gemini.`}
+                : isTestProvider
+                  ? ` Currently answering with ${model ?? "a test provider"} — not Gemini.`
+                  : " No model is configured in this build — answers come from a fixed fallback and say so."}
             </p>
           </div>
         </div>
@@ -169,6 +187,9 @@ export function GuidePanel({
               <span className="text-xs text-neutral-500">answered by</span>
               <SourceBadge source={response.source} model={response.model} />
             </div>
+            {response.note && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">{response.note}</p>
+            )}
             {response.grounded && (
               <details className="text-xs text-neutral-500">
                 <summary className="cursor-pointer">What the answer was based on</summary>
@@ -183,7 +204,9 @@ export function GuidePanel({
         <p className="text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">
           {isGemini
             ? "A demo client attached to show a Gemini call in context: it answers from the live deals. Without a model configured it falls back to a fixed answer and says so."
-            : "A demo client attached to show a model call in context: it answers from the live deals. This build is running a test provider, not Gemini — the badge under each answer names the model."}
+            : isTestProvider
+              ? "A demo client attached to show a model call in context: it answers from the live deals. This build is running a test provider, not Gemini — the badge under each answer names the model."
+              : "A demo client attached to show a model call in context. No model is configured in this build, so answers come from a fixed fallback and are labelled as such."}
         </p>
       </div>
     </div>

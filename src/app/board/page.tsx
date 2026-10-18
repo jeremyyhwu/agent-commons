@@ -4,6 +4,7 @@ import { listRooms, readResultCards } from "@/lib/outcome-service";
 import { getSignOffTransport, roomStage } from "@/lib/sign-off-transport";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { GuidePanel } from "@/components/guide-panel";
+import { llmConfig } from "@/lib/llm";
 import { SCENARIOS, DATA_PROVENANCE } from "@/lib/scenarios";
 
 /**
@@ -55,6 +56,10 @@ export default async function BoardPage() {
   const rooms = await listRooms();
   const signOffs = await transport.listSignOffs();
   const scenarioCount = SCENARIOS.length;
+  // The panel names the model that answers, so it has to be told which one this
+  // build is running. Without the props it cannot tell "Gemini" from "nothing
+  // configured" and used to claim the former either way.
+  const llm = llmConfig();
 
   // Derived per row from the cards the room actually rolled up to — the same
   // derivation the room page uses, so the two views cannot disagree.
@@ -150,7 +155,7 @@ export default async function BoardPage() {
           </CardContent>
         </Card>
         <div className="w-full shrink-0 lg:w-80">
-          <GuidePanel />
+          <GuidePanel provider={llm.provider} model={llm.model} />
         </div>
       </div>
 

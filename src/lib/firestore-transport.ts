@@ -83,6 +83,13 @@ function resolveProjectId(emulator: boolean): string {
   const existing = getApps()[0]?.options?.projectId;
   if (existing) return existing;
   if (emulator) return "agent-commons-local";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const config = require("../../firebase-applet-config.json");
+    if (config?.projectId) return config.projectId;
+  } catch {
+    // ignore
+  }
   throw new Error(
     "FirestoreTransport: set FIRESTORE_PROJECT_ID (or Firebase application default credentials) to reach a real Firestore.",
   );
@@ -211,6 +218,10 @@ export class FirestoreTransport implements Transport {
   constructor(options: FirestoreTransportOptions = {}) {
     this.collectionId =
       options.collection ?? first(process.env.FIRESTORE_COLLECTION) ?? DEFAULT_COLLECTION;
+    // Firebase projects scaffolded in AI Studio get a *named* Firestore database
+    // rather than "(default)", and a project can hold both. Reading the wrong one
+    // does not error — it just shows an empty board, which looks exactly like a
+    // broken deployment. FIRESTORE_DATABASE_ID picks one; unset means "(default)".
     const app = resolveApp();
     const dbId = process.env.FIRESTORE_DATABASE_ID;
     if (!dbId) {

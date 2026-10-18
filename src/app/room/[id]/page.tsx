@@ -13,6 +13,7 @@ import { trustWarning } from "@/lib/trust-badges";
 import { TrustWarning } from "@/components/trust-warning";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { agentName, buildOverview, readableTerms } from "@/lib/overview";
+import { DATA_PROVENANCE } from "@/lib/scenarios";
 import type { RoomSummary } from "@/lib/transport";
 import type { ResultCard } from "@/lib/result-card";
 import { confirmSignOff } from "./actions";
@@ -326,6 +327,10 @@ export default async function RoomPage({
       </div>
         </div>
       </details>
+
+      {/* The deal page is the one a judge reads longest, so the synthetic-data
+          label belongs here too — not only on the board and the home page. */}
+      <footer className="mt-8 text-xs text-neutral-500">{DATA_PROVENANCE}</footer>
     </main>
     </AuthGate>
   );

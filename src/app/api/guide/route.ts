@@ -34,7 +34,12 @@ const WHAT_IT_DOES_NOT_DO = [
   "no legal signature validity",
   "no real-world identity verification",
   "no agent framework or orchestration — agents run on each party's own stack",
-  "no conversation storage — the board shows outcomes only",
+  // Not "no conversation storage": send() does persist a message body, and a
+  // judge who posts one can see that it did. What is true, and what actually
+  // matters, is that nothing reads it back — no page, no verification, no
+  // outcome depends on a message. Saying it the other way is the one sentence
+  // here that a single call could disprove.
+  "no conversation in the outcome path — a message may be stored, but nothing reads it back and no result depends on it",
 ].join("; ");
 
 const THREE_STATES =
@@ -48,6 +53,17 @@ interface Grounding {
   focusRoom?: RoomSummary;
   focusCards?: unknown[];
 }
+
+/**
+ * Answers already given, for this question against this exact board.
+ *
+ * Bounded and process-local on purpose: the deployed service runs one instance,
+ * and a cache that survives too long would be a cache that lies about a board
+ * someone has since changed. Keying on the grounding text is what makes that
+ * safe — if a card moves, the key moves with it.
+ */
+const ANSWER_CACHE = new Map<string, string>();
+const ANSWER_CACHE_LIMIT = 50;
 
 async function ground(question: string, roomId?: string): Promise<Grounding> {
   // The board is read through the one definition of the product's read
@@ -129,6 +145,21 @@ async function verifyTermsTool(terms: Record<string, unknown>): Promise<string> 
   return `Recomputed hash from terms alone: ${hash}\n${onBoard}`;
 }
 
+/**
+ * Why the call failed, in one clause a reader can act on.
+ *
+ * The provider's own message for a spent free tier is a wall of JSON with the
+ * method name and service metadata inside it. That must not be pasted into the
+ * answer: it would appear on screen mid-demo and read as a crash.
+ */
+function failureReason(e: unknown): string {
+  const text = e instanceof Error ? e.message : String(e);
+  if (/RESOURCE_EXHAUSTED|\b429\b|quota|rate limit/i.test(text)) return "quota or rate limit";
+  if (/API key|\b401\b|\b403\b|PERMISSION_DENIED|unauthenticated/i.test(text)) return "the key was rejected";
+  if (/timeout|ETIMEDOUT|fetch failed|ECONN|ENOTFOUND/i.test(text)) return "network";
+  return "provider error";
+}
+
 export async function POST(request: Request) {
   let body: Record<string, unknown> = {};
   try {
@@ -153,6 +184,7 @@ export async function POST(request: Request) {
   const g = await ground(question, roomId);
   const fallback = deterministicAnswer(question, g);
   const config = llmConfig();
+  const context = compactContext(g);
 
   if (!config.configured) {
     return NextResponse.json({
@@ -162,7 +194,25 @@ export async function POST(request: Request) {
         `${PRODUCT_ONE_LINER}\n(No model configured — this is the deterministic fallback path.)`,
       source: "deterministic-fallback",
       model: "none",
-      grounded: compactContext(g),
+      grounded: context,
+    });
+  }
+
+  // One free-tier key has to cover a recording session and then however many
+  // judges open the link. The suggested questions are buttons, so the same
+  // question gets asked twice routinely — and the second ask costs a call plus
+  // several seconds to produce a word-for-word identical answer. The key carries
+  // the grounding text, so a board that has changed never serves a stale answer.
+  const cacheKey = `${config.provider}|${config.model}|${question}|${context}`;
+  const cached = ANSWER_CACHE.get(cacheKey);
+  if (cached) {
+    return NextResponse.json({
+      role: "demo-assistant",
+      answer: cached,
+      source: config.provider,
+      model: config.model,
+      grounded: context,
+      cached: true,
     });
   }
 
@@ -176,21 +226,31 @@ export async function POST(request: Request) {
 
   try {
     const answer = await llmGenerateText(question, { systemInstruction, temperature: 0.3 });
+    if (ANSWER_CACHE.size >= ANSWER_CACHE_LIMIT) {
+      const oldest = ANSWER_CACHE.keys().next().value;
+      if (oldest !== undefined) ANSWER_CACHE.delete(oldest);
+    }
+    ANSWER_CACHE.set(cacheKey, answer);
     return NextResponse.json({
       role: "demo-assistant",
       answer,
       source: config.provider,
       model: config.model,
-      grounded: compactContext(g),
+      grounded: context,
     });
   } catch (e) {
     // A model is configured but the call failed — degrade honestly, never fabricate.
+    // The answer stays clean and the failure is disclosed on its own line, so a
+    // spent quota produces a readable fallback instead of a stack trace on screen.
+    const reason = failureReason(e);
+    console.warn("guide: model call failed —", reason, e);
     return NextResponse.json({
       role: "demo-assistant",
-      answer: `${fallback ?? "The guide is unavailable right now."} (Model call failed: ${e instanceof Error ? e.message : String(e)} — showing the deterministic fallback.)`,
+      answer: fallback ?? `${PRODUCT_ONE_LINER}\n(The guide could not answer that from the board.)`,
       source: "deterministic-fallback",
       model: config.model,
-      grounded: compactContext(g),
+      note: `The model call failed (${reason}), so this is the fixed fallback answer — not a model answer.`,
+      grounded: context,
     });
   }
 }

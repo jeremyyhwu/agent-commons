@@ -26,10 +26,12 @@ orchestration engine and no agent runtime inside the product — the product is
 the **outcome layer** (card schema + hash + board + the transport boundary that
 records the cards).
 
-**How to log in: there is no login.** Every page, including the dashboard and
+**How to log in: you do not have to.** Every page, including the dashboard and
 every API route, is open to anonymous visitors. Nothing in the demo is gated,
-and no test credentials are needed. That is a demo choice, not a limit of the
-model — **visibility and validity are separate questions.** A session decides who
+and no test credentials are needed. Signing in, where a deployment offers it,
+only adds private rooms — it never stands between a visitor and the board. That
+is a demo choice, not a limit of the model — **visibility and validity are
+separate questions.** A session decides who
 may *read* a room; what makes a card *valid* is its hash and its issuer's
 signature, which no session can supply and none can forge. The lock hangs on the
 issuer's public key, not on a login.
@@ -110,8 +112,8 @@ layer, and a tool that could carry messages would be a channel we do not operate
 the canonical JSON of its own terms equals the hash it carries), then signature
 (Ed25519, verifying against the issuer key named in the card's `author`). Any
 failure is a refusal that names the step; nothing is stored. The write
-authenticates the *card*, not the caller, which is why no login stands in front
-of it.
+authenticates the *card*, not the caller, which is why nothing about a session
+stands in front of it.
 
 **Two endpoints let anyone check a card without trusting this deployment:**
 

@@ -40,12 +40,15 @@ checks.push(
 checks.push(
   [
     // Provider-independent: the panel must be labelled as a separate demo client
-    // and must name the model it is using — "Gemini assistant" when Gemini is
-    // configured, an explicit "answering with <model> — not Gemini" when it is
-    // not. Either way a viewer can tell what they are looking at.
+    // and must say which path answered — "Gemini assistant" when Gemini is
+    // configured, an explicit "answering with <model> — not Gemini" when a test
+    // provider is, and an explicit "no model is configured" when neither is.
+    // All three are honest; silence is not.
     home.includes("separate AI agent") &&
       home.includes("demo client") &&
-      (home.includes("Gemini assistant") || home.includes("Currently answering with")),
+      (home.includes("Gemini assistant") ||
+        home.includes("Currently answering with") ||
+        home.includes("No model is configured")),
     "guide: the panel is a separate demo client, and names the model behind it",
     "separate AI agent + model named",
   ],
