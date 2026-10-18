@@ -88,6 +88,17 @@ function resolveProjectId(emulator: boolean): string {
   );
 }
 
+/**
+ * Idempotent per process: Next dev hot-reload must not re-initialise the SDK.
+ *
+ * Emulator mode passes only a project id on purpose. firebase-admin hands the
+ * datastore endpoint off to `@google-cloud/firestore`, which reads
+ * FIRESTORE_EMULATOR_HOST itself, and its Firestore path accepts nothing but a
+ * service-account or application-default credential — a stub credential for
+ * quiet logs is rejected outright. So a local run prints one
+ * `MetadataLookupWarning` line and then works; a real deployment supplies ADC
+ * and never sees it.
+ */
 function resolveApp(): App {
   const existing = getApps().find((app) => app.name === APP_NAME);
   if (existing) return existing;
